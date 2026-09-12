@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vbdn-malware-cli"
+version = "2.0.0"
+description = "Paper-aligned VBDN malware image classification experiments"
+readme = "README.md"
+requires-python = ">=3.10"
+dynamic = ["dependencies"]
+
+[project.scripts]
+malware-cli = "cli:main"
+
+[tool.setuptools]
+py-modules = [
+  "big2015",
+  "cli",
+  "config",
+  "data_utils",
+  "glcm_pipeline",
+  "models",
+  "reporting",
+  "samplers",
+  "trainers",
+  "utils",
+  "visualizations",
+]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.ruff]
+line-length = 100
+exclude = ["backup_20260912_before_refactor"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "PL"]
+ignore = ["PLC0415", "PLR0913", "PLR0917", "PLR2004", "PLW2901"]

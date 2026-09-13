@@ -35,6 +35,8 @@ SAFE_TRAIN_BATCH_SIZE = 32
 SAFE_TEST_BATCH_SIZE = 16
 SAFE_PRETRAINED_BATCH_SIZE = 4
 SAFE_PRETRAINED_LEARNING_RATE = 0.0001
+RUN_ALL_CONVNET_EPOCHS = 80
+RUN_ALL_PRETRAINED_EPOCHS = 18
 
 KNOWN_DATASETS = {
     "Malimg": {"kaggle": "ikrambenabd/malimg-original", "subpath": "malimg_paper_dataset_imgs"},

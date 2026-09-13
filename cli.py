@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
+import os
 import platform
 import sys
 from datetime import datetime, timezone
@@ -22,6 +24,8 @@ from config import (
     PAPER_TEST_BATCH_SIZE,
     PAPER_TRAIN_BATCH_SIZE,
     RESULTS_DIR,
+    RUN_ALL_CONVNET_EPOCHS,
+    RUN_ALL_PRETRAINED_EPOCHS,
     SAFE_EPOCHS,
     SAFE_IMAGE_SIZE,
     SAFE_PRETRAINED_BATCH_SIZE,
@@ -58,7 +62,7 @@ def _add_dataset_options(parser: argparse.ArgumentParser, defaults=DEFAULT_DATAS
         type=Path,
         help="Image output folder; defaults to <big2015-path>/images",
     )
-    parser.add_argument("--big2015-workers", type=int, default=4)
+    parser.add_argument("--big2015-workers", type=int, default=os.cpu_count() or 1)
     parser.add_argument(
         "--big2015-limit",
         type=int,
@@ -81,7 +85,10 @@ def _add_dataset_options(parser: argparse.ArgumentParser, defaults=DEFAULT_DATAS
     )
 
 
-def _add_training_options(parser: argparse.ArgumentParser) -> None:
+def _add_training_options(
+    parser: argparse.ArgumentParser,
+    epochs_default: int | None = SAFE_EPOCHS,
+) -> None:
     """Attach paper-aligned optimization flags."""
     parser.add_argument("--train-split", type=float, default=0.7)
     parser.add_argument("--batch-size", type=int, default=SAFE_TRAIN_BATCH_SIZE)
@@ -93,7 +100,16 @@ def _add_training_options(parser: argparse.ArgumentParser) -> None:
         help="Training batch size for pretrained model comparisons",
     )
     parser.add_argument("--num-workers", type=int, default=2)
-    parser.add_argument("--epochs", type=int, default=SAFE_EPOCHS)
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=epochs_default,
+        help=(
+            "Epochs for every CNN; on run-all, overrides both model-family defaults"
+            if epochs_default is None
+            else "Number of training epochs"
+        ),
+    )
     parser.add_argument("--lr", type=float, default=PAPER_LEARNING_RATE)
     parser.add_argument(
         "--pretrained-lr",
@@ -180,8 +196,20 @@ def build_parser() -> argparse.ArgumentParser:
     _add_glcm_options(glcm)
 
     run_all = dataset_command("run-all", "Run every model on every dataset", ALL_DATASETS)
-    _add_training_options(run_all)
+    _add_training_options(run_all, epochs_default=None)
     _add_malevis_option(run_all)
+    run_all.add_argument(
+        "--convnet-epochs",
+        type=int,
+        default=RUN_ALL_CONVNET_EPOCHS,
+        help="Epochs for the custom ConvNet in run-all",
+    )
+    run_all.add_argument(
+        "--pretrained-epochs",
+        type=int,
+        default=RUN_ALL_PRETRAINED_EPOCHS,
+        help="Epochs for each pretrained deep model in run-all",
+    )
     run_all.add_argument("--skip-convnet", action="store_true")
     run_all.add_argument("--skip-pretrained", action="store_true")
     run_all.add_argument("--skip-glcm", action="store_true")
@@ -190,8 +218,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Preserve the original command name.
     all_alias = dataset_command("all", "Alias for run-all", ALL_DATASETS)
-    _add_training_options(all_alias)
+    _add_training_options(all_alias, epochs_default=None)
     _add_malevis_option(all_alias)
+    all_alias.add_argument(
+        "--convnet-epochs",
+        type=int,
+        default=RUN_ALL_CONVNET_EPOCHS,
+        help="Epochs for the custom ConvNet in run-all",
+    )
+    all_alias.add_argument(
+        "--pretrained-epochs",
+        type=int,
+        default=RUN_ALL_PRETRAINED_EPOCHS,
+        help="Epochs for each pretrained deep model in run-all",
+    )
     all_alias.add_argument("--skip-convnet", action="store_true")
     all_alias.add_argument("--skip-pretrained", action="store_true")
     all_alias.add_argument("--skip-glcm", action="store_true")
@@ -226,6 +266,8 @@ def _validate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None
         "pretrained_batch_size": 1,
         "num_workers": 0,
         "epochs": 1,
+        "convnet_epochs": 1,
+        "pretrained_epochs": 1,
         "big2015_workers": 1,
         "big2015_samples_per_class": 1,
         "max_samples_per_class": 2,
@@ -276,9 +318,15 @@ def _run_all(args: argparse.Namespace) -> None:
 
     results = []
     if not args.skip_convnet:
-        results.extend(run_convnet(args))
+        convnet_args = copy.copy(args)
+        convnet_args.epochs = args.epochs or args.convnet_epochs
+        print(f"ConvNet training epochs: {convnet_args.epochs}")
+        results.extend(run_convnet(convnet_args))
     if not args.skip_pretrained:
-        results.extend(run_pretrained(args))
+        pretrained_args = copy.copy(args)
+        pretrained_args.epochs = args.epochs or args.pretrained_epochs
+        print(f"Pretrained model training epochs: {pretrained_args.epochs}")
+        results.extend(run_pretrained(pretrained_args))
     if not args.skip_glcm:
         results.extend(run_glcm(args))
     save_comparison_plots(results, prefix="all_models")

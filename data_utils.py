@@ -19,7 +19,7 @@ def _known_name(value: str) -> str | None:
 
 
 def _cached_kaggle_root(slug: str) -> Path | None:
-    """Return the newest local kagglehub version when the SDK is unavailable."""
+    """Return the newest version from kagglehub's default local download cache."""
     versions = Path.home() / ".cache" / "kagglehub" / "datasets" / slug / "versions"
     if not versions.is_dir():
         return None
@@ -87,12 +87,13 @@ def get_dataset_paths(dataset_args, download: bool = True, args=None) -> list[tu
             continue
 
         if known in KNOWN_DATASETS:
+            dataset_config = KNOWN_DATASETS[known]
             if download:
                 print(f"Resolving {known} from Kaggle...")
                 try:
                     import kagglehub
                 except ImportError as exc:
-                    root = _cached_kaggle_root(KNOWN_DATASETS[known]["kaggle"])
+                    root = _cached_kaggle_root(dataset_config["kaggle"])
                     if root is None:
                         raise ImportError(
                             "Kaggle dependencies are incompatible and no cached copy exists. "
@@ -100,14 +101,29 @@ def get_dataset_paths(dataset_args, download: bool = True, args=None) -> list[tu
                         ) from exc
                     print(f"Using cached Kaggle data: {root}")
                 else:
-                    root = Path(kagglehub.dataset_download(KNOWN_DATASETS[known]["kaggle"]))
-                subpath = KNOWN_DATASETS[known]["subpath"]
-                path = root / subpath if subpath else _discover_imagefolder_root(root)
+                    root = Path(kagglehub.dataset_download(dataset_config["kaggle"]))
             else:
-                path = Path.cwd() / known
+                root = _cached_kaggle_root(dataset_config["kaggle"])
+                if root is None:
+                    expected = (
+                        Path.home()
+                        / ".cache"
+                        / "kagglehub"
+                        / "datasets"
+                        / dataset_config["kaggle"]
+                        / "versions"
+                    )
+                    raise FileNotFoundError(
+                        f"Dataset '{known}' is not available in the Kaggle cache at "
+                        f"{expected}. Run once with --download or pass a dataset path."
+                    )
+                print(f"Using cached Kaggle data for {known}: {root}")
+            subpath = dataset_config["subpath"]
+            path = root / subpath if subpath else _discover_imagefolder_root(root)
             if not path.is_dir():
                 raise FileNotFoundError(
-                    f"Dataset '{known}' was not found at {path}. Use --download or pass a path."
+                    f"Dataset '{known}' was not found inside its Kaggle cache at {path}. "
+                    "Run once with --download or pass a dataset path."
                 )
             datasets.append((known, str(path.resolve())))
             continue

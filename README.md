@@ -25,8 +25,9 @@ python main.py run-all
 python main.py run-all --paper-settings
 ```
 
-Known Kaggle datasets are downloaded by default. Use `--no-download` to use
-same-named local folders, or pass any ImageFolder-compatible path directly.
+Known Kaggle datasets are downloaded by default. Use `--no-download` to reuse
+their newest versions from KaggleHub's default cache at
+`~/.cache/kagglehub/datasets`, or pass any ImageFolder-compatible path directly.
 The Blended dataset uses
 `gauravpendharkar/blended-malware-image-dataset` and its ImageFolder root is
 detected automatically because Kaggle archive layouts may vary.
@@ -55,7 +56,12 @@ from `train.7z`, `--big2015-limit` for a global prefix, and
 uses `Processed_Dataset`.
 
 `run-all` runs every CNN and GLCM model on Malimg, Malevis, Blended, and
-BIG2015. Individual commands default to the original three datasets.
+BIG2015. By default, its custom ConvNet experiments run for 50 epochs and each
+pretrained deep model runs for 20 epochs. Override these independently with
+`--convnet-epochs` and `--pretrained-epochs`, or set both at once with
+`--epochs`. The `--no-download` flag only disables dataset downloads and does
+not change the epoch profile. Individual commands default to the original
+three datasets.
 
 The `glcm` command runs two explicitly labeled experiments by default:
 

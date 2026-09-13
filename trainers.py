@@ -189,7 +189,7 @@ def _train_cnn(
     device,
 ) -> dict:
     """Train or load one CNN, evaluate it, and persist all artifacts."""
-    stem = f"{safe_name(dataset_name)}__{safe_name(model_name)}"
+    stem = f"{safe_name(dataset_name)}__{safe_name(model_name)}__epochs_{args.epochs}"
     model_path = MODEL_DIR / f"{stem}.pth"
     history = []
     train_time = None
@@ -221,6 +221,7 @@ def _train_cnn(
     result = {
         "Dataset": dataset_name,
         "Model": model_name,
+        "Epochs": args.epochs,
         **metrics,
         "Train Samples": train_samples,
         "Train Time (s)": train_time,

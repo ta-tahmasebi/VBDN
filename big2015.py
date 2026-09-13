@@ -195,7 +195,7 @@ def _select_members(
 def prepare_big2015(
     source: str | Path,
     output: str | Path | None = None,
-    workers: int = 4,
+    workers: int = 1,
     overwrite: bool = False,
     limit: int | None = None,
     samples_per_class: int | None = None,

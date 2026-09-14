@@ -1,106 +1,127 @@
-# Malware Classification CLI
+# VBDN Malware Image Classification
 
-This CLI trains a compact ConvNet, pretrained image models, and classical
-classifiers based on GLCM texture features. Every evaluation writes summary
-metrics, per-class reports, predictions, confusion matrices, and comparison
-charts below `results/`.
+An image-based, multi-class malware classification pipeline based on:
 
-## Setup
+> Y. Liu, H. Fan, J. Zhao, J. Zhang, and X. Yin, “Efficient and Generalized Image-Based CNN
+> Algorithm for Multi-Class Malware Detection,” *IEEE Access*, vol. 12, pp. 104317–104332,
+> 2024. [DOI: 10.1109/ACCESS.2024.3435362](https://doi.org/10.1109/ACCESS.2024.3435362)
+
+The paper proposes **VBDN**, a framework that combines malware visualization, balanced sampling,
+image augmentation, and a compact convolutional network. This implementation also compares VBDN
+with ImageNet-pretrained networks and classical classifiers trained on GLCM texture features.
+
+## Method
+
+Malware bytes are mapped to grayscale intensities in `[0, 255]` and arranged as images. Programs
+from the same malware family often produce similar textures and structural patterns, allowing image
+classifiers to distinguish them without executing or disassembling the samples.
+
+The repository supports three experiment families:
+
+| Pipeline | Models |
+|---|---|
+| VBDN-style CNN | Three-layer custom ConvNet |
+| Transfer learning | VGG16, AlexNet, DenseNet-121, MobileNetV2, ResNeXt-50, ShuffleNetV2 |
+| GLCM texture classification | Logistic Regression, Gaussian NB, KNN, Decision Tree, Random Forest, GBDT, SVM, MLP, XGBoost, LightGBM |
+
+The custom ConvNet uses three `3x3` convolutional layers with 32, 64, and 128 channels, `2x2`
+pooling, global average pooling, and two linear layers. Imbalanced datasets use inverse-frequency
+weighted sampling, while random flips and rotations provide augmentation.
+
+![Representative BIG2015 malware images](docs/images/big2015-class-gallery.png)
+
+These are byte plots, not screenshots or executed malware. Their bands, low-entropy regions, and
+textures are the patterns used for classification.
+
+## Installation
+
+Python 3.10 is required. A CUDA-capable GPU is recommended for full experiments.
 
 ```bash
-source ~/Codes/env10/bin/activate
-pip install -r requirements.txt
-```
+git clone https://github.com/ta-tahmasebi/VBDN.git
+cd VBDN
 
-BIG2015 conversion also requires the `7z` executable (`p7zip-full` on Ubuntu).
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -e .
 
-## Commands
-
-```bash
 python main.py --help
-python main.py convnet --datasets Malimg
-python main.py pretrained --datasets Malevis --models VGG16 MobileNetV2
-python main.py glcm --datasets Blended
-python main.py run-all
-python main.py run-all --paper-settings
+# The installed equivalent is: malware-cli --help
 ```
 
-Known Kaggle datasets are downloaded by default. Use `--no-download` to reuse
-their newest versions from KaggleHub's default cache at
-`~/.cache/kagglehub/datasets`, or pass any ImageFolder-compatible path directly.
-MaleVis and Blended use their supplied `train` and `val` directories directly;
-validation data is never mixed back into training. Malimg keeps the paper's
-8,408 training images; the available 9,339-image archive leaves 931 test images
-(Table 1 reports an inconsistent total four images larger). BIG2015 uses a
-70/30 stratified split.
-Local ImageFolder paths continue to use `--train-split`.
+BIG2015 conversion also requires `7z` or `7zz`:
 
-## BIG2015
+```bash
+sudo apt install p7zip-full   # Ubuntu/Debian
+# macOS: brew install sevenzip
+# Windows: install 7-Zip and add it to PATH
+```
 
-The source folder must contain `train.7z` and `trainLabels.csv`. Its default is
-`/home/amirmahdi/.cache/kaggle/BIG2015/main/`, and it can be overridden:
+## Datasets
+
+| Dataset | Classes | Split used here | Download |
+|---|---:|---|---|
+| Malimg | 25 | 8,408 train / 931 test | Automatic through KaggleHub |
+| MaleVis | 26 | Supplied 9,100 train / 5,126 validation | Automatic through KaggleHub |
+| Blended | 31 | Supplied 9,868 train / 3,879 validation | Automatic through KaggleHub |
+| BIG2015 | 9 | Stratified 70/30: 7,607 train / 3,261 test | Manual Kaggle competition download |
+
+Malimg, MaleVis, and Blended are downloaded on first use and cached under
+`~/.cache/kagglehub/datasets/`. Use `--no-download` to require an existing cached copy. Custom
+datasets can be passed as ImageFolder-compatible directories with one subdirectory per class.
+
+MaleVis and Blended use their supplied validation directories without mixing them into training.
+The available Malimg archive contains 9,339 images—four fewer than the total in the paper—so the
+paper's 8,408 training samples are retained and the remaining 931 are used for testing.
+
+### Preparing BIG2015
+
+BIG2015 is distributed through the
+[Microsoft Malware Classification Challenge](https://www.kaggle.com/competitions/malware-classification/data).
+
+1. Sign in to Kaggle and accept the competition rules.
+2. Download `train.7z` and `trainLabels.csv`; the `.asm` and test archives are not required.
+3. Put both files in the same directory. The default is `~/.cache/kaggle/BIG2015/main/`.
+4. Convert the archived `.bytes` files to PNG images:
 
 ```bash
 python main.py prepare-big2015 \
-  --source /path/to/BIG2015/main \
+  --source ~/.cache/kaggle/BIG2015/main \
   --workers 6
-
-python main.py convnet \
-  --datasets BIG2015 \
-  --big2015-path /path/to/BIG2015/main
 ```
 
-Each `.bytes` member is streamed from the archive into memory, converted to one
-PNG, and released. The complete training archive is never extracted. Existing
-PNGs are skipped, so interrupted conversion can resume safely. Use
-`--big2015-samples-per-class 4` for a balanced smoke subset streamed directly
-from `train.7z`, `--big2015-limit` for a global prefix, and
-`--rebuild-big2015` to overwrite existing images. The converter never reads or
-uses `Processed_Dataset`.
+The converter streams one file at a time from the archive and never extracts the complete
+`train.7z`. Existing images are skipped, failures are recorded in `conversion_manifest.csv`, and
+an interrupted conversion can be resumed safely.
 
-`run-all` runs every CNN and GLCM model on Malimg, Malevis, Blended, and
-BIG2015. By default, its custom ConvNet experiments run for 80 epochs and each
-pretrained deep model runs for 18 epochs. Override these independently with
-`--convnet-epochs` and `--pretrained-epochs`, or set both at once with
-`--epochs`. The `--no-download` flag only disables dataset downloads and does
-not change the epoch profile. Individual commands default to the original
-three datasets.
+```bash
+# Balanced conversion smoke test
+python main.py prepare-big2015 --source /data/BIG2015 --samples-per-class 4
 
-The `glcm` command runs two explicitly labeled experiments by default:
+# Write images to another disk
+python main.py prepare-big2015 \
+  --source /data/BIG2015 \
+  --output /mnt/ssd/BIG2015-images
 
-- `raw`: original training images, without resampling or augmentation
-- `balanced-augmented`: index-based oversampling followed by resize, random
-  horizontal flip, and random rotation before GLCM extraction
+# Train with that image directory
+python main.py convnet --datasets BIG2015 \
+  --big2015-path /data/BIG2015 \
+  --big2015-images /mnt/ssd/BIG2015-images
+```
 
-Run only one branch with `--glcm-variants raw` or
-`--glcm-variants balanced-augmented`.
+Use `--limit N` for a global prefix, `--samples-per-class N` for a balanced subset, and
+`--overwrite` to rebuild existing images. BIG2015 is large, so keep both the archive and generated
+images on a volume with sufficient free space.
 
-Balanced GLCM sampling draws one inverse-frequency weighted epoch with the
-original training-set length, matching `BalancedDatasetSampler` instead of
-expanding every class to the majority count. GLCM defaults to 256 gray levels,
-following the paper's 0-255 image-intensity description; use `--glcm-levels 32`
-or `--glcm-levels 8` if memory is constrained.
+> **Safety:** BIG2015 `.bytes` files are hexadecimal text dumps. This project only converts them
+> into images. Never execute malware samples, and use an isolated research environment when
+> required by your organization.
 
-The main `convnet` command automatically adds a second MaleVis experiment with
-the `Other` class removed. Disable it with `--no-malevis-without-other`.
+## Running experiments
 
-## Paper alignment
-
-Use `--paper-settings` to select the paper's disclosed training hyperparameters:
-512-pixel input, three 3x3 convolution layers with 32/64/128 channels,
-2x2 pooling, 28x28 global pooling, dense layers of 64 and the class count, 200
-epochs, SGD learning rate 0.01, momentum 0.5, and seed 50. ConvNet uses
-train/test batches 64/32, while pretrained comparisons use batch size 8.
-
-Without `--paper-settings`, `run-all` uses 80 ConvNet epochs, 18 pretrained
-epochs, 224-pixel images, ConvNet train/test batches 32/16, and pretrained batch
-size 4. The randomly replaced classifier head uses learning rate 0.01 while the
-ImageNet backbone uses 0.0001. This lets short runs learn the new classes without
-destabilizing the pretrained feature extractor. Explicit CLI values remain
-available; `--paper-settings` only overrides disclosed training parameters and
-does not claim to fill in details omitted by the paper.
-
-For a quick full-pipeline check without loading every sample, use:
+Start with a small end-to-end check:
 
 ```bash
 python main.py run-all \
@@ -110,13 +131,105 @@ python main.py run-all \
   --no-save-models
 ```
 
-## Result layout
+Typical commands:
 
-- `results/csv`: pipeline summaries and cross-model comparisons
-- `results/reports`: detailed classification reports and JSON metrics
-- `results/predictions`: sample-level predictions and class scores
-- `results/plots`: class/image and augmentation galleries, GLCM examples,
-  class-balance plots, feature importance, learning, confusion, ROC/PR,
-  per-class, and comparison charts
-- `results/models`: CNN checkpoints
-- `results/last_run.json`: command, environment, and reproducibility metadata
+```bash
+python main.py convnet --datasets Malimg
+python main.py pretrained --datasets Malevis --models VGG16 MobileNetV2
+python main.py glcm --datasets Blended
+python main.py run-all --no-download
+python main.py run-all --paper-settings
+```
+
+The standard `run-all` profile uses 224-pixel images, 80 ConvNet epochs, and 18 pretrained-model
+epochs. `--paper-settings` selects the paper's disclosed 512-pixel input, 200 epochs, SGD learning
+rate 0.01, momentum 0.5, seed 50, and paper batch sizes. It is substantially more expensive.
+
+The GLCM pipeline evaluates `raw` and `balanced-augmented` variants by default. Run only one with
+`--glcm-variants raw`. GLCM uses 256 gray levels by default; `--glcm-levels 32` or `8` reduces
+memory use. See `python main.py <command> --help` for all options.
+
+## Results
+
+The following results are from `results/csv/all_models__summary.csv`. They were produced with
+the standard resource-safe profile, not the full 200-epoch paper profile.
+
+| Dataset | ConvNet | Best pretrained | Best raw GLCM |
+|---|---:|---:|---:|
+| Malimg | 98.07% | DenseNet-121: 99.36% | LightGBM: 97.96% |
+| BIG2015 | 97.15% | VGG16: 98.41% | Random Forest: 94.05% |
+| MaleVis | 84.74% | VGG16: 87.59% | Random Forest: 74.93% |
+| Blended | 95.51% | VGG16: 96.29% | Random Forest: 90.44% |
+| MaleVis without `Other` | 95.36% | — | — |
+
+### Comparison with the paper
+
+| Dataset | Paper VBDN | This ConvNet | Difference |
+|---|---:|---:|---:|
+| Malimg | 94.22% | 98.07% | +3.85 pp |
+| BIG2015 | 96.19% | 97.15% | +0.96 pp |
+| MaleVis | 83.22% | 84.74% | +1.52 pp |
+| MaleVis without `Other` | 96.76% | 95.36% | -1.40 pp |
+| Blended | 91.39% | 95.51% | +4.12 pp |
+
+These are descriptive rather than exact replication comparisons: image size, epoch count,
+available archives, software, and hardware differ. MaleVis also contains a disproportionately large
+`Other` validation class. Its removal raises the reproduced ConvNet accuracy from 84.74% to 95.36%,
+which is why both results are reported separately.
+
+![Accuracy heatmap across all models](docs/images/all-models-accuracy-heatmap.png)
+
+### GLCM examples
+
+The six GLCM statistics are contrast, dissimilarity, homogeneity, energy, correlation, and ASM.
+In the stored experiments, raw GLCM features consistently outperformed features extracted after
+image augmentation; geometric augmentation can distort the texture statistics used by these small
+classical models.
+
+![BIG2015 malware images and their GLCMs](docs/images/big2015-glcm-gallery.png)
+
+### Per-class analysis
+
+The row-normalized confusion matrix exposes errors hidden by overall accuracy. For example, the
+BIG2015 ConvNet reaches 97.15% overall accuracy, while class 5 has only 61.5% recall.
+
+![BIG2015 ConvNet confusion matrix](docs/images/big2015-convnet-confusion-matrix.png)
+
+## Output files
+
+All generated artifacts are written under the ignored `results/` directory:
+
+| Path | Contents |
+|---|---|
+| `results/csv/` | Per-family and cross-model summaries |
+| `results/reports/` | JSON metrics and per-class reports |
+| `results/predictions/` | Sample-level predictions and class scores |
+| `results/plots/` | Galleries, learning curves, confusion matrices, ROC/PR curves, feature importance, and comparison charts |
+| `results/models/` | CNN checkpoints |
+| `results/cache/` | Cached GLCM features |
+| `results/last_run.json` | Platform, Python version, seed, and CLI arguments |
+
+Selected figures are copied to `docs/images/` so they remain visible on GitHub while the large
+`results/` directory stays out of version control.
+
+## Reproducibility
+
+- Dataset splits are stratified and deterministic with seed 50.
+- BIG2015 uses a 70/30 split because its labeled training release has no official test split.
+- `--paper-settings` reproduces disclosed hyperparameters, not undocumented implementation details.
+- Hardware, CUDA, PyTorch, data-loader settings, and pretrained weights can affect timing and small
+  numerical differences.
+
+## Citation
+
+```bibtex
+@article{liu2024vbdn,
+  author  = {Yajun Liu and Hong Fan and Jianguang Zhao and Jianfang Zhang and Xinxin Yin},
+  title   = {Efficient and Generalized Image-Based CNN Algorithm for Multi-Class Malware Detection},
+  journal = {IEEE Access},
+  volume  = {12},
+  pages   = {104317--104332},
+  year    = {2024},
+  doi     = {10.1109/ACCESS.2024.3435362}
+}
+```

@@ -26,7 +26,7 @@ class TransformWrapper(Dataset):
 class DatasetSampler(torch.utils.data.sampler.Sampler):
     """Sample underrepresented classes more frequently."""
 
-    def __init__(self, dataset, labels=None, indices=None, num_samples=None):
+    def __init__(self, dataset, labels=None, indices=None, num_samples=None, seed=None):
         """Compute inverse-frequency sampling weights."""
         self.indices = list(range(len(dataset))) if indices is None else indices
         self.num_samples = len(self.indices) if num_samples is None else num_samples
@@ -56,12 +56,20 @@ class DatasetSampler(torch.utils.data.sampler.Sampler):
         label_counts = df["label"].value_counts()
         weights = 1.0 / label_counts[df["label"]]
         self.weights = torch.DoubleTensor(weights.to_list())
+        self.generator = None
+        if seed is not None:
+            self.generator = torch.Generator().manual_seed(seed)
 
     def __iter__(self):
         """Draw a balanced sequence of dataset indices with replacement."""
         return (
             self.indices[i]
-            for i in torch.multinomial(self.weights, self.num_samples, replacement=True)
+            for i in torch.multinomial(
+                self.weights,
+                self.num_samples,
+                replacement=True,
+                generator=self.generator,
+            )
         )
 
     def __len__(self):

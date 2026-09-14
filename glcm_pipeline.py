@@ -19,7 +19,7 @@ from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
 
 from config import CSV_DIR, SEED
-from data_utils import get_dataset_paths
+from data_utils import effective_train_size, resolve_dataset_splits
 from reporting import save_comparison_plots, save_evaluation, save_results_csv
 from visualizations import (
     save_augmentation_gallery,
@@ -69,7 +69,7 @@ def _augment_image(image: Image.Image, rng: np.random.Generator) -> Image.Image:
 def extract_glcm_features(
     image_path: str | Path,
     target_size: tuple[int, int] = (128, 128),
-    levels: int = 8,
+    levels: int = 256,
     distances: tuple[int, ...] = (1,),
     angles: tuple[float, ...] = (0, np.pi / 4, np.pi / 2, 3 * np.pi / 4),
     augment: bool = False,
@@ -95,12 +95,21 @@ def extract_glcm_features(
     return np.asarray([graycoprops(matrix, name).mean() for name in GLCM_PROPERTIES])
 
 
-def index_image_dataset(dataset_path: str | Path, max_samples_per_class: int | None = None):
+def index_image_dataset(
+    dataset_path: str | Path,
+    max_samples_per_class: int | None = None,
+    classes: list[str] | None = None,
+):
     """Index ImageFolder-compatible files without decoding all images."""
     root = Path(dataset_path)
-    classes = sorted(path.name for path in root.iterdir() if path.is_dir())
+    discovered_classes = sorted(path.name for path in root.iterdir() if path.is_dir())
+    classes = discovered_classes if classes is None else classes
     if not classes:
         raise ValueError(f"No class folders found in {root}")
+    missing = sorted(set(classes) - set(discovered_classes))
+    extra = sorted(set(discovered_classes) - set(classes))
+    if missing or extra:
+        raise ValueError(f"Class folders differ at {root}; missing={missing}, extra={extra}")
     paths, labels = [], []
     for label, class_name in enumerate(classes):
         class_paths = sorted(
@@ -119,7 +128,11 @@ def index_image_dataset(dataset_path: str | Path, max_samples_per_class: int | N
 
 
 def _extract_feature_matrix(
-    paths, labels, augment: bool
+    paths,
+    labels,
+    augment: bool,
+    target_size: int,
+    levels: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Extract features while retaining only successfully decoded samples."""
     features, valid_labels, valid_paths = [], [], []
@@ -127,7 +140,15 @@ def _extract_feature_matrix(
     samples = zip(paths, labels, strict=True)
     for index, (path, label) in enumerate(tqdm(samples, total=len(paths), desc=description)):
         try:
-            features.append(extract_glcm_features(path, augment=augment, seed=SEED + index))
+            features.append(
+                extract_glcm_features(
+                    path,
+                    target_size=(target_size, target_size),
+                    levels=levels,
+                    augment=augment,
+                    seed=SEED + index,
+                )
+            )
             valid_labels.append(label)
             valid_paths.append(str(path))
         except (OSError, ValueError) as exc:
@@ -138,16 +159,14 @@ def _extract_feature_matrix(
 
 
 def _balanced_training_index(paths, labels) -> tuple[np.ndarray, np.ndarray]:
-    """Oversample each training class to the majority count without copying files."""
+    """Draw one inverse-frequency weighted epoch, matching DatasetSampler."""
     rng = np.random.default_rng(SEED)
     class_counts = np.bincount(labels)
-    target_count = int(class_counts.max())
-    sampled = []
-    for class_index in range(len(class_counts)):
-        candidates = np.flatnonzero(labels == class_index)
-        sampled.extend(rng.choice(candidates, size=target_count, replace=True))
-    sampled = np.asarray(sampled)
-    rng.shuffle(sampled)
+    if np.all(class_counts == class_counts[0]):
+        return paths.copy(), labels.copy()
+    weights = 1.0 / class_counts[labels]
+    probabilities = weights / weights.sum()
+    sampled = rng.choice(len(labels), size=len(labels), replace=True, p=probabilities)
     return paths[sampled], labels[sampled]
 
 
@@ -231,6 +250,8 @@ def _fit_variant(
                 "Dataset": dataset_name,
                 "Model": model_name,
                 "Variant": variant,
+                "GLCM Image Size": args.glcm_image_size,
+                "GLCM Levels": args.glcm_levels,
                 **metrics,
                 "Train Samples": len(train_labels),
                 "Train Time (s)": train_time,
@@ -250,28 +271,49 @@ def run_glcm(args) -> list[dict]:
     """Compare raw GLCM with balanced and augmented GLCM experiments."""
     if SKIMAGE_IMPORT_ERROR:
         raise ImportError("scikit-image is required for GLCM mode") from SKIMAGE_IMPORT_ERROR
-    datasets = get_dataset_paths(args.datasets, download=args.download, args=args)
+    datasets = resolve_dataset_splits(args.datasets, download=args.download, args=args)
     results = []
-    for dataset_name, dataset_path in datasets:
+    for dataset_spec in datasets:
+        dataset_name = dataset_spec.name
         print(f"Indexing GLCM dataset: {dataset_name}")
-        paths, labels, classes = index_image_dataset(dataset_path, args.max_samples_per_class)
-        save_dataset_gallery(paths, labels, classes, dataset_name)
-        save_augmentation_gallery(paths, labels, classes, dataset_name)
-        save_glcm_gallery(paths, labels, classes, dataset_name)
-        train_paths, test_paths, train_labels, test_labels = train_test_split(
-            paths,
-            labels,
-            train_size=args.train_split,
-            random_state=SEED,
-            stratify=labels,
+        train_paths, train_labels, classes = index_image_dataset(
+            dataset_spec.train_path, args.max_samples_per_class
         )
+        save_dataset_gallery(train_paths, train_labels, classes, dataset_name)
+        save_augmentation_gallery(train_paths, train_labels, classes, dataset_name)
+        save_glcm_gallery(train_paths, train_labels, classes, dataset_name)
+        if dataset_spec.test_path is None:
+            split_size = effective_train_size(
+                dataset_spec.train_size, len(train_paths), args.train_split
+            )
+            train_paths, test_paths, train_labels, test_labels = train_test_split(
+                train_paths,
+                train_labels,
+                train_size=split_size,
+                random_state=SEED,
+                stratify=train_labels,
+            )
+        else:
+            test_paths, test_labels, _ = index_image_dataset(
+                dataset_spec.test_path,
+                args.max_samples_per_class,
+                classes=classes,
+            )
         test_features, test_labels, test_paths = _extract_feature_matrix(
-            test_paths, test_labels, augment=False
+            test_paths,
+            test_labels,
+            augment=False,
+            target_size=args.glcm_image_size,
+            levels=args.glcm_levels,
         )
 
         if "raw" in args.glcm_variants:
             raw_features, raw_labels, _ = _extract_feature_matrix(
-                train_paths, train_labels, augment=False
+                train_paths,
+                train_labels,
+                augment=False,
+                target_size=args.glcm_image_size,
+                levels=args.glcm_levels,
             )
             results.extend(
                 _fit_variant(
@@ -291,7 +333,11 @@ def run_glcm(args) -> list[dict]:
             balanced_paths, balanced_labels = _balanced_training_index(train_paths, train_labels)
             save_balance_comparison(train_labels, balanced_labels, classes, dataset_name)
             balanced_features, balanced_labels, _ = _extract_feature_matrix(
-                balanced_paths, balanced_labels, augment=True
+                balanced_paths,
+                balanced_labels,
+                augment=True,
+                target_size=args.glcm_image_size,
+                levels=args.glcm_levels,
             )
             results.extend(
                 _fit_variant(

@@ -39,14 +39,22 @@ RUN_ALL_CONVNET_EPOCHS = 80
 RUN_ALL_PRETRAINED_EPOCHS = 18
 
 KNOWN_DATASETS = {
-    "Malimg": {"kaggle": "ikrambenabd/malimg-original", "subpath": "malimg_paper_dataset_imgs"},
+    "Malimg": {
+        "kaggle": "ikrambenabd/malimg-original",
+        "subpath": "malimg_paper_dataset_imgs",
+        # Keep the paper's 8,408 training images. The available archive has
+        # 9,339 images (four fewer than Table 1), so its test remainder is 931.
+        "paper_train_size": 8408,
+    },
     "Malevis": {
         "kaggle": "sohamkumar1703/malevis-dataset",
         "subpath": "malevis_train_val_300x300/train",
+        "test_subpath": "malevis_train_val_300x300/val",
     },
     "Blended": {
         "kaggle": "gauravpendharkar/blended-malware-image-dataset",
-        "subpath": None,
+        "subpath": "malware_dataset/train",
+        "test_subpath": "malware_dataset/val",
     },
 }
 

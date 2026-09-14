@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +11,16 @@ from sklearn.model_selection import train_test_split
 from config import KNOWN_DATASETS, SEED
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
+
+
+@dataclass(frozen=True)
+class ResolvedDataset:
+    """A dataset's paper-aligned training and evaluation sources."""
+
+    name: str
+    train_path: str
+    test_path: str | None = None
+    train_size: int | float | None = None
 
 
 def _known_name(value: str) -> str | None:
@@ -64,8 +75,10 @@ def _discover_imagefolder_root(root: Path) -> Path:
     return max(candidates, key=lambda candidate: candidate[:2])[2]
 
 
-def get_dataset_paths(dataset_args, download: bool = True, args=None) -> list[tuple[str, str]]:
-    """Resolve Kaggle datasets, BIG2015, and local ImageFolder paths."""
+def resolve_dataset_splits(  # noqa: PLR0912
+    dataset_args, download: bool = True, args=None
+) -> list[ResolvedDataset]:
+    """Resolve paper-aligned train/test sources without mixing official test data."""
     datasets = []
     for raw_item in dataset_args:
         item = str(raw_item)
@@ -83,7 +96,13 @@ def get_dataset_paths(dataset_args, download: bool = True, args=None) -> list[tu
                 args.big2015_limit,
                 args.big2015_samples_per_class,
             )
-            datasets.append((known, str(path)))
+            datasets.append(
+                ResolvedDataset(
+                    known,
+                    str(path),
+                    train_size=args.train_split,
+                )
+            )
             continue
 
         if known in KNOWN_DATASETS:
@@ -118,24 +137,54 @@ def get_dataset_paths(dataset_args, download: bool = True, args=None) -> list[tu
                         f"{expected}. Run once with --download or pass a dataset path."
                     )
                 print(f"Using cached Kaggle data for {known}: {root}")
-            subpath = dataset_config["subpath"]
-            path = root / subpath if subpath else _discover_imagefolder_root(root)
-            if not path.is_dir():
+            subpath = dataset_config.get("subpath")
+            train_path = root / subpath if subpath else _discover_imagefolder_root(root)
+            if not train_path.is_dir():
                 raise FileNotFoundError(
-                    f"Dataset '{known}' was not found inside its Kaggle cache at {path}. "
+                    f"Dataset '{known}' was not found inside its Kaggle cache at {train_path}. "
                     "Run once with --download or pass a dataset path."
                 )
-            datasets.append((known, str(path.resolve())))
+            test_subpath = dataset_config.get("test_subpath")
+            test_path = root / test_subpath if test_subpath else None
+            if test_path is not None and not test_path.is_dir():
+                raise FileNotFoundError(
+                    f"Dataset '{known}' test split was not found at {test_path}."
+                )
+            datasets.append(
+                ResolvedDataset(
+                    known,
+                    str(train_path.resolve()),
+                    str(test_path.resolve()) if test_path is not None else None,
+                    dataset_config.get(
+                        "paper_train_size",
+                        args.train_split if args is not None else 0.7,
+                    ),
+                )
+            )
             continue
 
         path = Path(item).expanduser()
         if not path.is_dir():
             raise FileNotFoundError(f"Dataset path does not exist: {path}")
-        datasets.append((path.resolve().name, str(path.resolve())))
+        datasets.append(
+            ResolvedDataset(
+                path.resolve().name,
+                str(path.resolve()),
+                train_size=args.train_split if args is not None else 0.7,
+            )
+        )
     return datasets
 
 
-def stratified_indices(targets, train_fraction: float) -> tuple[list[int], list[int]]:
+def get_dataset_paths(dataset_args, download: bool = True, args=None) -> list[tuple[str, str]]:
+    """Backward-compatible resolver returning each dataset's training source."""
+    return [
+        (dataset.name, dataset.train_path)
+        for dataset in resolve_dataset_splits(dataset_args, download=download, args=args)
+    ]
+
+
+def stratified_indices(targets, train_fraction: int | float) -> tuple[list[int], list[int]]:
     """Return deterministic train/test indices while preserving class ratios."""
     indices = np.arange(len(targets))
     try:
@@ -151,3 +200,14 @@ def stratified_indices(targets, train_fraction: float) -> tuple[list[int], list[
             "samples in both splits."
         ) from exc
     return train.tolist(), test.tolist()
+
+
+def effective_train_size(
+    configured_size: int | float | None,
+    sample_count: int,
+    fallback_fraction: float,
+) -> int | float:
+    """Use an exact paper split unless a deliberately limited smoke set is smaller."""
+    if isinstance(configured_size, int) and configured_size >= sample_count:
+        return fallback_fraction
+    return configured_size or fallback_fraction

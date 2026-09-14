@@ -90,7 +90,12 @@ def _add_training_options(
     epochs_default: int | None = SAFE_EPOCHS,
 ) -> None:
     """Attach paper-aligned optimization flags."""
-    parser.add_argument("--train-split", type=float, default=0.7)
+    parser.add_argument(
+        "--train-split",
+        type=float,
+        default=0.7,
+        help="Train fraction for BIG2015 and custom paths; known supplied splits stay fixed",
+    )
     parser.add_argument("--batch-size", type=int, default=SAFE_TRAIN_BATCH_SIZE)
     parser.add_argument("--test-batch-size", type=int, default=SAFE_TEST_BATCH_SIZE)
     parser.add_argument(
@@ -161,6 +166,18 @@ def _add_glcm_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--rf-estimators", type=int, default=100)
     parser.add_argument("--gbdt-estimators", type=int, default=100)
     parser.add_argument("--xgb-estimators", type=int, default=100)
+    parser.add_argument(
+        "--glcm-image-size",
+        type=int,
+        default=128,
+        help="Square working size for resource-safe GLCM extraction",
+    )
+    parser.add_argument(
+        "--glcm-levels",
+        type=int,
+        default=256,
+        help="GLCM gray levels; 256 follows the paper's 0-255 intensity range",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -192,7 +209,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_pretrained_options(pretrained)
 
     glcm = dataset_command("glcm", "Train classical models on GLCM features")
-    glcm.add_argument("--train-split", type=float, default=0.7)
+    glcm.add_argument(
+        "--train-split",
+        type=float,
+        default=0.7,
+        help="Train fraction for BIG2015 and custom paths; known supplied splits stay fixed",
+    )
     _add_glcm_options(glcm)
 
     run_all = dataset_command("run-all", "Run every model on every dataset", ALL_DATASETS)
@@ -271,6 +293,8 @@ def _validate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None
         "big2015_workers": 1,
         "big2015_samples_per_class": 1,
         "max_samples_per_class": 2,
+        "glcm_image_size": 8,
+        "glcm_levels": 2,
     }
     for name, minimum in limits.items():
         if (
@@ -279,6 +303,8 @@ def _validate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None
             and getattr(args, name) < minimum
         ):
             parser.error(f"--{name.replace('_', '-')} must be at least {minimum}")
+    if hasattr(args, "glcm_levels") and (args.glcm_levels > 256 or 256 % args.glcm_levels != 0):
+        parser.error("--glcm-levels must be a divisor of 256 between 2 and 256")
 
 
 def _apply_training_profile(args: argparse.Namespace) -> None:

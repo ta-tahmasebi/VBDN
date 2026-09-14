@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gc
+import random
 import time
 
 import numpy as np
@@ -14,7 +15,12 @@ from torchvision.datasets import ImageFolder
 from tqdm import tqdm
 
 from config import CSV_DIR, MODEL_DIR, SEED
-from data_utils import get_dataset_paths, stratified_indices
+from data_utils import (
+    ResolvedDataset,
+    effective_train_size,
+    resolve_dataset_splits,
+    stratified_indices,
+)
 from models import ConvNet, get_pretrained_model
 from reporting import (
     plot_training_history,
@@ -33,27 +39,32 @@ from visualizations import (
 
 def _save_dataset_overview(
     args,
-    dataset_name: str,
-    dataset_path: str,
+    dataset_spec: ResolvedDataset,
     excluded_classes: tuple[str, ...] = (),
 ) -> None:
     """Save representative images and sampler balance for CNN-only runs."""
     dataset = _image_folder(
-        dataset_path,
+        dataset_spec.train_path,
         excluded_classes,
         max_samples_per_class=args.max_samples_per_class,
     )
     paths = np.asarray([path for path, _ in dataset.samples])
     labels = np.asarray(dataset.targets)
-    train_indices, _ = stratified_indices(labels, args.train_split)
-    train_labels = labels[train_indices]
+    if dataset_spec.test_path is None:
+        train_indices, _ = stratified_indices(
+            labels,
+            effective_train_size(dataset_spec.train_size, len(labels), args.train_split),
+        )
+        train_labels = labels[train_indices]
+    else:
+        train_labels = labels
     maximum = int(np.bincount(train_labels).max())
     balanced_labels = np.concatenate(
         [np.full(maximum, class_index, dtype=int) for class_index in range(len(dataset.classes))]
     )
-    save_dataset_gallery(paths, labels, dataset.classes, dataset_name)
-    save_augmentation_gallery(paths, labels, dataset.classes, dataset_name)
-    save_balance_comparison(train_labels, balanced_labels, dataset.classes, dataset_name)
+    save_dataset_gallery(paths, labels, dataset.classes, dataset_spec.name)
+    save_augmentation_gallery(paths, labels, dataset.classes, dataset_spec.name)
+    save_balance_comparison(train_labels, balanced_labels, dataset.classes, dataset_spec.name)
 
 
 def _image_folder(
@@ -92,7 +103,7 @@ def _image_folder(
 
 def _make_loaders(
     args,
-    dataset_path: str,
+    dataset_spec: ResolvedDataset,
     pretrained: bool,
     excluded_classes: tuple[str, ...] = (),
 ):
@@ -116,31 +127,68 @@ def _make_loaders(
             transforms.Normalize(*normalization),
         ]
     )
-    base = _image_folder(
-        dataset_path,
+    train_base = _image_folder(
+        dataset_spec.train_path,
         excluded_classes,
         max_samples_per_class=args.max_samples_per_class,
     )
-    train_indices, test_indices = stratified_indices(base.targets, args.train_split)
-    train_raw = Subset(base, train_indices)
-    test_raw = Subset(base, test_indices)
+    if dataset_spec.test_path is None:
+        train_indices, test_indices = stratified_indices(
+            train_base.targets,
+            effective_train_size(dataset_spec.train_size, len(train_base), args.train_split),
+        )
+        train_raw = Subset(train_base, train_indices)
+        test_raw = Subset(train_base, test_indices)
+        train_labels = [train_base.targets[index] for index in train_indices]
+        sample_ids = [train_base.samples[index][0] for index in test_indices]
+        classes = train_base.classes
+    else:
+        test_base = _image_folder(
+            dataset_spec.test_path,
+            excluded_classes,
+            max_samples_per_class=args.max_samples_per_class,
+        )
+        if train_base.classes != test_base.classes:
+            raise ValueError(
+                f"Train/test classes differ for {dataset_spec.name}: "
+                f"{train_base.classes} != {test_base.classes}"
+            )
+        train_raw = train_base
+        test_raw = test_base
+        train_labels = train_base.targets
+        sample_ids = [path for path, _ in test_base.samples]
+        classes = train_base.classes
     train_data = TransformWrapper(train_raw, train_transform)
     test_data = TransformWrapper(test_raw, test_transform)
-    sampler = DatasetSampler(train_data, [base.targets[index] for index in train_indices])
     shared_options = {
         "num_workers": args.num_workers,
         "pin_memory": torch.cuda.is_available(),
         "persistent_workers": args.num_workers > 0,
     }
     training_batch_size = args.pretrained_batch_size if pretrained else args.batch_size
-    train_loader = DataLoader(
-        train_data, batch_size=training_batch_size, sampler=sampler, **shared_options
-    )
+    class_counts = np.bincount(train_labels, minlength=len(classes))
+    generator = torch.Generator().manual_seed(SEED)
+    if np.all(class_counts == class_counts[0]):
+        train_loader = DataLoader(
+            train_data,
+            batch_size=training_batch_size,
+            shuffle=True,
+            generator=generator,
+            **shared_options,
+        )
+    else:
+        sampler = DatasetSampler(train_data, train_labels, seed=SEED)
+        train_loader = DataLoader(
+            train_data,
+            batch_size=training_batch_size,
+            sampler=sampler,
+            generator=generator,
+            **shared_options,
+        )
     test_loader = DataLoader(
         test_data, batch_size=args.test_batch_size, shuffle=False, **shared_options
     )
-    sample_ids = [base.samples[index][0] for index in test_indices]
-    return train_loader, test_loader, base.classes, sample_ids, len(train_indices)
+    return train_loader, test_loader, classes, sample_ids, len(train_data)
 
 
 def _train_epoch(model, loader, criterion, optimizer, device) -> tuple[float, float]:
@@ -189,7 +237,14 @@ def _train_cnn(
     device,
 ) -> dict:
     """Train or load one CNN, evaluate it, and persist all artifacts."""
-    stem = f"{safe_name(dataset_name)}__{safe_name(model_name)}__epochs_{args.epochs}"
+    training_batch_size = args.batch_size if model_name == "ConvNet" else args.pretrained_batch_size
+    optimization_tag = f"lr_{args.lr:g}__mom_{args.momentum:g}__batch_{training_batch_size}"
+    if model_name != "ConvNet":
+        optimization_tag += f"__backbone_lr_{args.pretrained_lr:g}"
+    stem = (
+        f"{safe_name(dataset_name)}__{safe_name(model_name)}__epochs_{args.epochs}"
+        f"__img_{args.image_size}__{optimization_tag}__paperdata_v2"
+    )
     model_path = MODEL_DIR / f"{stem}.pth"
     history = []
     train_time = None
@@ -198,8 +253,22 @@ def _train_cnn(
     if trained:
         print(f"Training {model_name} on {dataset_name} ({device})...")
         criterion = nn.CrossEntropyLoss()
-        learning_rate = args.lr if model_name == "ConvNet" else args.pretrained_lr
-        optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=args.momentum)
+        if model_name == "ConvNet":
+            optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+        else:
+            head = _classification_head(model, model_name)
+            head_parameters = list(head.parameters())
+            head_ids = {id(parameter) for parameter in head_parameters}
+            backbone_parameters = [
+                parameter for parameter in model.parameters() if id(parameter) not in head_ids
+            ]
+            optimizer = optim.SGD(
+                [
+                    {"params": backbone_parameters, "lr": args.pretrained_lr},
+                    {"params": head_parameters, "lr": args.lr},
+                ],
+                momentum=args.momentum,
+            )
         started = time.perf_counter()
         epochs = tqdm(range(1, args.epochs + 1), desc=f"{model_name} / {dataset_name}")
         for epoch in epochs:
@@ -222,6 +291,11 @@ def _train_cnn(
         "Dataset": dataset_name,
         "Model": model_name,
         "Epochs": args.epochs,
+        "Image Size": args.image_size,
+        "Train Batch Size": training_batch_size,
+        "Test Batch Size": args.test_batch_size,
+        "Head Learning Rate": args.lr,
+        "Backbone Learning Rate": (args.pretrained_lr if model_name != "ConvNet" else args.lr),
         **metrics,
         "Train Samples": train_samples,
         "Train Time (s)": train_time,
@@ -238,24 +312,42 @@ def _train_cnn(
 
 def _seed_everything() -> None:
     """Seed CPU and GPU random generators for reproducible experiments."""
+    random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(SEED)
+    if torch.backends.cudnn.is_available():
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
+
+
+def _classification_head(model, model_name: str) -> nn.Module:
+    """Return the randomly initialized output head of a torchvision model."""
+    if model_name in {"VGG16", "AlexNet"}:
+        return model.classifier[6]
+    if model_name == "DenseNet-121":
+        return model.classifier
+    if model_name == "MobileNetV2":
+        return model.classifier[1]
+    if model_name in {"ResNeXt-50", "ShuffleNetV2"}:
+        return model.fc
+    raise ValueError(f"Unknown model name: {model_name}")
 
 
 def _run_cnn_models(args, model_names: list[str] | None) -> list[dict]:
     """Run the requested CNN family over every resolved dataset."""
     _seed_everything()
-    datasets = get_dataset_paths(args.datasets, download=args.download, args=args)
+    datasets = resolve_dataset_splits(args.datasets, download=args.download, args=args)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     results = []
     visualized = set()
     names = model_names or ["ConvNet"]
     for model_name in names:
-        for dataset_name, dataset_path in datasets:
+        for dataset_spec in datasets:
+            dataset_name = dataset_spec.name
             if dataset_name not in visualized:
-                _save_dataset_overview(args, dataset_name, dataset_path)
+                _save_dataset_overview(args, dataset_spec)
                 visualized.add(dataset_name)
             variants = [(dataset_name, ())]
             if (
@@ -266,11 +358,18 @@ def _run_cnn_models(args, model_names: list[str] | None) -> list[dict]:
                 variants.append(("Malevis_without_Other", ("Other", "Others")))
             for variant_name, excluded_classes in variants:
                 if excluded_classes and variant_name not in visualized:
-                    _save_dataset_overview(args, variant_name, dataset_path, excluded_classes)
+                    variant_spec = ResolvedDataset(
+                        variant_name,
+                        dataset_spec.train_path,
+                        dataset_spec.test_path,
+                        dataset_spec.train_size,
+                    )
+                    _save_dataset_overview(args, variant_spec, excluded_classes)
                     visualized.add(variant_name)
+                _seed_everything()
                 loaders = _make_loaders(
                     args,
-                    dataset_path,
+                    dataset_spec,
                     pretrained=model_names is not None,
                     excluded_classes=excluded_classes,
                 )

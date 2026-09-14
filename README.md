@@ -28,9 +28,12 @@ python main.py run-all --paper-settings
 Known Kaggle datasets are downloaded by default. Use `--no-download` to reuse
 their newest versions from KaggleHub's default cache at
 `~/.cache/kagglehub/datasets`, or pass any ImageFolder-compatible path directly.
-The Blended dataset uses
-`gauravpendharkar/blended-malware-image-dataset` and its ImageFolder root is
-detected automatically because Kaggle archive layouts may vary.
+MaleVis and Blended use their supplied `train` and `val` directories directly;
+validation data is never mixed back into training. Malimg keeps the paper's
+8,408 training images; the available 9,339-image archive leaves 931 test images
+(Table 1 reports an inconsistent total four images larger). BIG2015 uses a
+70/30 stratified split.
+Local ImageFolder paths continue to use `--train-split`.
 
 ## BIG2015
 
@@ -56,8 +59,8 @@ from `train.7z`, `--big2015-limit` for a global prefix, and
 uses `Processed_Dataset`.
 
 `run-all` runs every CNN and GLCM model on Malimg, Malevis, Blended, and
-BIG2015. By default, its custom ConvNet experiments run for 50 epochs and each
-pretrained deep model runs for 20 epochs. Override these independently with
+BIG2015. By default, its custom ConvNet experiments run for 80 epochs and each
+pretrained deep model runs for 18 epochs. Override these independently with
 `--convnet-epochs` and `--pretrained-epochs`, or set both at once with
 `--epochs`. The `--no-download` flag only disables dataset downloads and does
 not change the epoch profile. Individual commands default to the original
@@ -72,23 +75,30 @@ The `glcm` command runs two explicitly labeled experiments by default:
 Run only one branch with `--glcm-variants raw` or
 `--glcm-variants balanced-augmented`.
 
+Balanced GLCM sampling draws one inverse-frequency weighted epoch with the
+original training-set length, matching `BalancedDatasetSampler` instead of
+expanding every class to the majority count. GLCM defaults to 256 gray levels,
+following the paper's 0-255 image-intensity description; use `--glcm-levels 32`
+or `--glcm-levels 8` if memory is constrained.
+
 The main `convnet` command automatically adds a second MaleVis experiment with
 the `Other` class removed. Disable it with `--no-malevis-without-other`.
 
 ## Paper alignment
 
-Use `--paper-settings` to select the exact `paper.pdf` profile: 70/30 stratified
-split, 512-pixel input, three 3x3 convolution layers with 32/64/128 channels,
+Use `--paper-settings` to select the paper's disclosed training hyperparameters:
+512-pixel input, three 3x3 convolution layers with 32/64/128 channels,
 2x2 pooling, 28x28 global pooling, dense layers of 64 and the class count, 200
 epochs, SGD learning rate 0.01, momentum 0.5, and seed 50. ConvNet uses
 train/test batches 64/32, while pretrained comparisons use batch size 8.
 
-Without `--paper-settings`, the resource-safe profile uses 100 epochs,
-128-pixel images, ConvNet train/test batches 4/4, and pretrained batch size 2.
-It uses learning rates 0.01 for ConvNet and 0.0001 for pretrained models to
-avoid unstable fine-tuning. These defaults are intended for CPU execution on
-a 16 GB machine. Explicit CLI values remain available, while
-`--paper-settings` deliberately overrides them to preserve paper reproducibility.
+Without `--paper-settings`, `run-all` uses 80 ConvNet epochs, 18 pretrained
+epochs, 224-pixel images, ConvNet train/test batches 32/16, and pretrained batch
+size 4. The randomly replaced classifier head uses learning rate 0.01 while the
+ImageNet backbone uses 0.0001. This lets short runs learn the new classes without
+destabilizing the pretrained feature extractor. Explicit CLI values remain
+available; `--paper-settings` only overrides disclosed training parameters and
+does not claim to fill in details omitted by the paper.
 
 For a quick full-pipeline check without loading every sample, use:
 

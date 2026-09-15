@@ -11,7 +11,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from config import (
+from .config import (
     ALL_DATASETS,
     DEFAULT_BIG2015_PATH,
     DEFAULT_DATASETS,
@@ -338,9 +338,9 @@ def _write_run_metadata(args: argparse.Namespace) -> None:
 
 def _run_all(args: argparse.Namespace) -> None:
     """Execute every requested pipeline and create global comparisons."""
-    from glcm_pipeline import run_glcm
-    from reporting import save_comparison_plots
-    from trainers import run_convnet, run_pretrained
+    from .glcm_pipeline import run_glcm
+    from .reporting import save_comparison_plots
+    from .trainers import run_convnet, run_pretrained
 
     results = []
     if not args.skip_convnet:
@@ -366,7 +366,7 @@ def main(argv: list[str] | None = None) -> None:
     _validate(args, parser)
 
     if args.command == "prepare-big2015":
-        from big2015 import prepare_big2015
+        from .big2015 import prepare_big2015
 
         prepare_big2015(
             args.source,
@@ -383,15 +383,15 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Command: {args.command}")
 
     if args.command == "convnet":
-        from trainers import run_convnet
+        from .trainers import run_convnet
 
         run_convnet(args)
     elif args.command == "pretrained":
-        from trainers import run_pretrained
+        from .trainers import run_pretrained
 
         run_pretrained(args)
     elif args.command == "glcm":
-        from glcm_pipeline import run_glcm
+        from .glcm_pipeline import run_glcm
 
         run_glcm(args)
     else:

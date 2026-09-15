@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-from config import KNOWN_DATASETS, SEED
+from .config import KNOWN_DATASETS, SEED
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
 
@@ -86,7 +86,7 @@ def resolve_dataset_splits(  # noqa: PLR0912
         if known == "BIG2015":
             if args is None:
                 raise ValueError("BIG2015 requires CLI conversion options")
-            from big2015 import prepare_big2015
+            from .big2015 import prepare_big2015
 
             path = prepare_big2015(
                 args.big2015_path,

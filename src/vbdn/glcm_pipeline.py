@@ -18,10 +18,10 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
 
-from config import CSV_DIR, SEED
-from data_utils import effective_train_size, resolve_dataset_splits
-from reporting import save_comparison_plots, save_evaluation, save_results_csv
-from visualizations import (
+from .config import CSV_DIR, SEED
+from .data_utils import effective_train_size, resolve_dataset_splits
+from .reporting import save_comparison_plots, save_evaluation, save_results_csv
+from .visualizations import (
     save_augmentation_gallery,
     save_balance_comparison,
     save_dataset_gallery,

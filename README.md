@@ -6,9 +6,22 @@ An image-based, multi-class malware classification pipeline based on:
 > Algorithm for Multi-Class Malware Detection,” *IEEE Access*, vol. 12, pp. 104317–104332,
 > 2024. [DOI: 10.1109/ACCESS.2024.3435362](https://doi.org/10.1109/ACCESS.2024.3435362)
 
+A local copy of the publication is available at [`docs/paper.pdf`](docs/paper.pdf).
+
 The paper proposes **VBDN**, a framework that combines malware visualization, balanced sampling,
 image augmentation, and a compact convolutional network. This implementation also compares VBDN
 with ImageNet-pretrained networks and classical classifiers trained on GLCM texture features.
+
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| `src/vbdn/` | Installable Python package and CLI implementation |
+| `docs/paper.pdf` | Reference paper |
+| `docs/results.md` | Detailed reproduction results and analysis |
+| `docs/images/` | Figures used by the project documentation |
+| `pyproject.toml` | Package metadata, command entry point, and tool configuration |
+| `requirements.txt` | Runtime dependencies |
 
 ## Method
 
@@ -47,7 +60,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python -m pip install -e .
 
-python main.py --help
+python -m vbdn --help
 # The installed equivalent is: malware-cli --help
 ```
 
@@ -87,7 +100,7 @@ BIG2015 is distributed through the
 4. Convert the archived `.bytes` files to PNG images:
 
 ```bash
-python main.py prepare-big2015 \
+python -m vbdn prepare-big2015 \
   --source ~/.cache/kaggle/BIG2015/main \
   --workers 6
 ```
@@ -98,15 +111,15 @@ an interrupted conversion can be resumed safely.
 
 ```bash
 # Balanced conversion smoke test
-python main.py prepare-big2015 --source /data/BIG2015 --samples-per-class 4
+python -m vbdn prepare-big2015 --source /data/BIG2015 --samples-per-class 4
 
 # Write images to another disk
-python main.py prepare-big2015 \
+python -m vbdn prepare-big2015 \
   --source /data/BIG2015 \
   --output /mnt/ssd/BIG2015-images
 
 # Train with that image directory
-python main.py convnet --datasets BIG2015 \
+python -m vbdn convnet --datasets BIG2015 \
   --big2015-path /data/BIG2015 \
   --big2015-images /mnt/ssd/BIG2015-images
 ```
@@ -124,7 +137,7 @@ images on a volume with sufficient free space.
 Start with a small end-to-end check:
 
 ```bash
-python main.py run-all \
+python -m vbdn run-all \
   --epochs 1 \
   --max-samples-per-class 4 \
   --big2015-samples-per-class 4 \
@@ -134,11 +147,11 @@ python main.py run-all \
 Typical commands:
 
 ```bash
-python main.py convnet --datasets Malimg
-python main.py pretrained --datasets Malevis --models VGG16 MobileNetV2
-python main.py glcm --datasets Blended
-python main.py run-all --no-download
-python main.py run-all --paper-settings
+python -m vbdn convnet --datasets Malimg
+python -m vbdn pretrained --datasets Malevis --models VGG16 MobileNetV2
+python -m vbdn glcm --datasets Blended
+python -m vbdn run-all --no-download
+python -m vbdn run-all --paper-settings
 ```
 
 The standard `run-all` profile uses 224-pixel images, 80 ConvNet epochs, and 18 pretrained-model
@@ -147,7 +160,7 @@ rate 0.01, momentum 0.5, seed 50, and paper batch sizes. It is substantially mor
 
 The GLCM pipeline evaluates `raw` and `balanced-augmented` variants by default. Run only one with
 `--glcm-variants raw`. GLCM uses 256 gray levels by default; `--glcm-levels 32` or `8` reduces
-memory use. See `python main.py <command> --help` for all options.
+memory use. See `python -m vbdn <command> --help` for all options.
 
 ## Results
 
@@ -155,7 +168,7 @@ The following results are from `results/csv/all_models__summary.csv`. They were 
 the standard resource-safe profile, not the full 200-epoch paper profile.
 
 The complete tables, charts, and comparison with the paper are available in
-[the detailed results report](results.md).
+[the detailed results report](docs/results.md).
 
 | Dataset | ConvNet | Best pretrained | Best raw GLCM |
 |---|---:|---:|---:|

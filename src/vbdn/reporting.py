@@ -25,7 +25,7 @@ from sklearn.metrics import (
     roc_curve,
 )
 
-from config import CSV_DIR, PLOT_DIR, PREDICTION_DIR, REPORT_DIR
+from .config import CSV_DIR, PLOT_DIR, PREDICTION_DIR, REPORT_DIR
 
 warnings.filterwarnings(
     "ignore",

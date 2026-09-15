@@ -11,22 +11,10 @@ requires-python = ">=3.10"
 dynamic = ["dependencies"]
 
 [project.scripts]
-malware-cli = "cli:main"
+malware-cli = "vbdn.cli:main"
 
-[tool.setuptools]
-py-modules = [
-  "big2015",
-  "cli",
-  "config",
-  "data_utils",
-  "glcm_pipeline",
-  "models",
-  "reporting",
-  "samplers",
-  "trainers",
-  "utils",
-  "visualizations",
-]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}

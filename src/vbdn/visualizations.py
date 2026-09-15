@@ -11,8 +11,8 @@ import seaborn as sns
 from PIL import Image
 from skimage.feature import graycomatrix
 
-from config import PLOT_DIR
-from reporting import safe_name
+from .config import PLOT_DIR
+from .reporting import safe_name
 
 
 def save_dataset_gallery(

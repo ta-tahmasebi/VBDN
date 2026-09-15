@@ -47,6 +47,10 @@ The paper values are from Table 3 (page 14 of the PDF). Exception: for ConvNet o
 | ResNeXt-50   | 94.03              | 95.92            | +1.89 pp   | 59163.44       | 2209.84          | -96.26% | 3.43               | 82.98%                         | 48.21%                                  | Same dataset name; different protocol |
 | ShuffleNetV2 | 90.30              | 85.39            | -4.91 pp   | 13280.06       | 475.17           | -96.42% | 1.67               | 24.18%                         | -6.31%                                  | Same dataset name; different protocol |
 
+![Malimg deep-model accuracy: paper versus our saved run](docs/images/deep-malimg.png)
+
+![Malimg reported time: paper versus our training and evaluation](docs/images/time-malimg.png)
+
 <details>
 <summary>Additional quality metrics from our run</summary>
 
@@ -73,6 +77,10 @@ The paper values are from Table 3 (page 14 of the PDF). Exception: for ConvNet o
 | MobileNetV2  | 92.17              | 95.31            | +3.14 pp   | 105207.88      | 709.03           | -99.33% | 18.26              | 39.55%                         | -1.29%                                  | Same dataset name; different protocol |
 | ResNeXt-50   | 95.43              | 90.46            | -4.97 pp   | 107543.06      | 2062.16          | -98.08% | 18.80              | 40.86%                         | 1.61%                                   | Same dataset name; different protocol |
 | ShuffleNetV2 | 95.03              | 83.50            | -11.53 pp  | 109635.93      | 643.85           | -99.41% | 20.30              | 42.00%                         | 8.89%                                   | Same dataset name; different protocol |
+
+![BIG2015 deep-model accuracy: paper versus our saved run](docs/images/deep-big2015.png)
+
+![BIG2015 reported time: paper versus our training and evaluation](docs/images/time-big2015.png)
 
 <details>
 <summary>Additional quality metrics from our run</summary>
@@ -101,6 +109,10 @@ The paper values are from Table 3 (page 14 of the PDF). Exception: for ConvNet o
 | ResNeXt-50   | 93.18              | 77.21            | -15.97 pp  | 60597.31       | 2431.36          | -95.99% | 19.31              | 72.72%                         | 46.00%                                  | Paper: apparently without Other; ours: with Other † |
 | ShuffleNetV2 | 92.69              | 49.12            | -43.57 pp  | 18860.12       | 523.32           | -97.23% | 10.70              | 12.31%                         | 2.59%                                   | Paper: apparently without Other; ours: with Other † |
 
+![MaleVis deep-model accuracy: paper versus our saved run](docs/images/deep-malevis.png)
+
+![MaleVis reported time: paper versus our training and evaluation](docs/images/time-malevis.png)
+
 <details>
 <summary>Additional quality metrics from our run</summary>
 
@@ -128,6 +140,10 @@ The paper values are from Table 3 (page 14 of the PDF). Exception: for ConvNet o
 | ResNeXt-50   | 90.14              | 85.51            | -4.63 pp   | 68743.93       | 2653.81          | -96.14% | 14.62              | 72.58%                         | 48.55%                                  | Same dataset name; different protocol |
 | ShuffleNetV2 | 91.32              | 65.79            | -25.53 pp  | 22139.80       | 581.98           | -97.37% | 7.66               | 14.80%                         | 1.82%                                   | Same dataset name; different protocol |
 
+![Blended deep-model accuracy: paper versus our saved run](docs/images/deep-blended.png)
+
+![Blended reported time: paper versus our training and evaluation](docs/images/time-blended.png)
+
 <details>
 <summary>Additional quality metrics from our run</summary>
 
@@ -151,6 +167,10 @@ This run is our only saved result for this subset; no results for the other mode
 | ------- | ------------------ | ---------------- | ---------- | -------------- | ---------------- | ------- | ------------------ | ----------------- | -------- |
 | ConvNet | 96.76              | 95.36            | -1.40 pp   | 16539.89       | 1482.60          | -91.04% | 6.80               | 95.34             | 0.953    |
 
+![MaleVis without Other ConvNet accuracy: paper versus our saved run](docs/images/deep-malevis-without-other.png)
+
+![MaleVis without Other reported time: paper versus our training and evaluation](docs/images/time-malevis-without-other.png)
+
 † The marked MaleVis comparisons do not cover the same scope and should not be interpreted as definitive superiority or weakness of a model.
 
 ## 2. GLCM Models: All Models and Both Variants
@@ -171,6 +191,8 @@ For each dataset, the paper’s accuracy is first shown alongside both of our re
 | LightGBM           | —         | 97.96       | —         | 63.27                | —              | -34.69 pp                             |
 | SVM                | —         | 89.69       | —         | 58.75                | —              | -30.93 pp                             |
 | MLP                | —         | 96.13       | —         | 59.40                | —              | -36.73 pp                             |
+
+![Malimg GLCM accuracy: paper, raw, and balanced-augmented results](docs/images/glcm-malimg.png)
 
 <details>
 <summary>All GLCM metrics and times for this dataset</summary>
@@ -215,6 +237,8 @@ For each dataset, the paper’s accuracy is first shown alongside both of our re
 | SVM                | —         | 85.89       | —         | 80.01                | —              | -5.89 pp                              |
 | MLP                | —         | 90.74       | —         | 85.62                | —              | -5.12 pp                              |
 
+![BIG2015 GLCM accuracy: paper, raw, and balanced-augmented results](docs/images/glcm-big2015.png)
+
 <details>
 <summary>All GLCM metrics and times for this dataset</summary>
 
@@ -258,6 +282,8 @@ For each dataset, the paper’s accuracy is first shown alongside both of our re
 | SVM                | —         | 51.64       | —         | 44.40                | —              | -7.24 pp                              |
 | MLP                | —         | 63.66       | —         | 52.59                | —              | -11.06 pp                             |
 
+![MaleVis GLCM accuracy: paper, raw, and balanced-augmented results](docs/images/glcm-malevis.png)
+
 <details>
 <summary>All GLCM metrics and times for this dataset</summary>
 
@@ -300,6 +326,8 @@ For each dataset, the paper’s accuracy is first shown alongside both of our re
 | LightGBM           | —         | 89.40       | —         | 59.81                | —              | -29.60 pp                             |
 | SVM                | —         | 66.54       | —         | 58.34                | —              | -8.20 pp                              |
 | MLP                | —         | 80.64       | —         | 68.19                | —              | -12.45 pp                             |
+
+![Blended GLCM accuracy: paper, raw, and balanced-augmented results](docs/images/glcm-blended.png)
 
 <details>
 <summary>All GLCM metrics and times for this dataset</summary>

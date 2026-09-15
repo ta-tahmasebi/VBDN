@@ -154,6 +154,9 @@ memory use. See `python main.py <command> --help` for all options.
 The following results are from `results/csv/all_models__summary.csv`. They were produced with
 the standard resource-safe profile, not the full 200-epoch paper profile.
 
+The complete tables, charts, and comparison with the paper are available in
+[the detailed results report](results.md).
+
 | Dataset | ConvNet | Best pretrained | Best raw GLCM |
 |---|---:|---:|---:|
 | Malimg | 98.07% | DenseNet-121: 99.36% | LightGBM: 97.96% |

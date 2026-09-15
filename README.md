@@ -6,7 +6,7 @@ An image-based, multi-class malware classification pipeline based on:
 > Algorithm for Multi-Class Malware Detection,” *IEEE Access*, vol. 12, pp. 104317–104332,
 > 2024. [DOI: 10.1109/ACCESS.2024.3435362](https://doi.org/10.1109/ACCESS.2024.3435362)
 
-A local copy of the publication is available at [`docs/paper/paper.pdf`](docs/paper/paper.pdf).
+A local copy of the publication is available at [`paper/paper.pdf`](paper/paper.pdf).
 
 The paper proposes **VBDN**, a framework that combines malware visualization, balanced sampling,
 image augmentation, and a compact convolutional network. This implementation also compares VBDN
@@ -17,7 +17,7 @@ with ImageNet-pretrained networks and classical classifiers trained on GLCM text
 | Path | Contents |
 |---|---|
 | `src/vbdn/` | Installable Python package and CLI implementation |
-| `docs/paper/` | Reference paper and related publication files |
+| `paper/` | Reference paper and related publication files |
 | `docs/results.md` | Detailed reproduction results and analysis |
 | `docs/images/` | Figures used by the project documentation |
 | `pyproject.toml` | Package metadata, command entry point, and tool configuration |

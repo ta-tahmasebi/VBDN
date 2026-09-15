@@ -12,17 +12,6 @@ The paper proposes **VBDN**, a framework that combines malware visualization, ba
 image augmentation, and a compact convolutional network. This implementation also compares VBDN
 with ImageNet-pretrained networks and classical classifiers trained on GLCM texture features.
 
-## Repository layout
-
-| Path | Contents |
-|---|---|
-| `src/vbdn/` | Installable Python package and CLI implementation |
-| `paper/` | Reference paper and related publication files |
-| `docs/results.md` | Detailed reproduction results and analysis |
-| `docs/images/` | Figures used by the project documentation |
-| `pyproject.toml` | Package metadata, command entry point, and tool configuration |
-| `requirements.txt` | Runtime dependencies |
-
 ## Method
 
 Malware bytes are mapped to grayscale intensities in `[0, 255]` and arranged as images. Programs
